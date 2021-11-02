@@ -19,15 +19,20 @@ tidy=TRUE, tidy.opts=list(width.cutoff=60), R.options=list(max.print=100))
 
 ## Data Wrangling, Exploration, Visualization
 
-### Name and EID here
+### Sapna Bhakta
 
 #### Introduction 
 
-Paragraph or two introducing your datasets and variables, why they are interesting to you, etc.
+  First I found two datasets with data on makeup brands and products from Sephora and Ulta. This contained links and a description of the products. Second I gathered a dataset called allShades that had more specific product information. From these columns, I focused on analyzing the hue, saturation, and lightness of each product. All three datasets were found through rfordatascience on github where I downloaded csv files and read them through. Through my visualizations I decide to analyze some common drugstore-brand vs. high-end brands in order too see the variation in their product makeups.
+  Analyzing this data interested me because some brands are known for having controversial shade selections and not catering to a variety of skin colors. I am also interested in makeup and was curious to see the diversity of options for various brands. 
+
 
 ```{R}
-# read your datasets in here, e.g., with read_csv()
-
+library(tidyverse)
+library(knitr)
+sephora <- read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-03-30/sephora.csv')
+ulta <- read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-03-30/ulta.csv')
+allShades <- read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-03-30/allShades.csv')
 ```
 
 #### Tidying: Reshaping
@@ -35,56 +40,117 @@ Paragraph or two introducing your datasets and variables, why they are interesti
 If your datasets are tidy already, demonstrate that you can reshape data with pivot wider/longer here (e.g., untidy and then retidy). Alternatively, it may be easier to wait until the wrangling section so you can reshape your summary statistics. Note here if you are going to do this.
 
 ```{R}
-# your tidying code (if applicable; can also wait until wrangling section)
-```
+stores <- full_join(sephora, ulta) %>% select(brand, product, specific)
+shades <- allShades %>% select(brand, product, specific, colorspace, hue, sat, lightness)
 
+```
+ I used one re-shaping tool in the wrangling section since the table was already tidy. 
     
 #### Joining/Merging
 
 ```{R}
-# your joining code
-
-# your joining code
+nrow(stores)
+nrow(shades)
+length(unique(stores$brand))
+length(unique(shades$brand))
+missing <- anti_join(stores, shades, by="brand")
+unique(missing$brand)
+```
+```{r}
+inner_data <- inner_join(stores, shades)
+length(unique(inner_data$brand))
 ```
 
-Discussions of joining here. Feel encouraged to break up into more than once code chunk and discuss each in turn.
+The Sephora and Ulta datasets which once joined are fully joined in order to maintain all rows was labeled stores. This dataset has 113 unique brands while the allShades dataset has 107 unique brands. I decided to do an inner join to keep only the brands that are present in both. The 6 brands that did not overlap are listed above. The inner_data dataset is 53133 observations which is significantly larger than the original datasets of 8375 and 6816 observations.  
 
 ####  Wrangling
 
+
+```{r}
+inner_data %>% select(hue, sat, lightness) %>% summary()%>% kable()
+```
+From this table, we can see some summary statistics on the hue, saturation, and lightness of the products. It is notable that the hue has a large range from 0-230.4, while the median remains at 24.93 indicating a large spread in the upper quartile or outliers. The sat and hue contain values between 0-1.
+
+
 ```{R}
-# your wrangling code
+inner_dataset <- inner_data %>% mutate(`hue/sat`=hue/sat, `hue/lightness`=hue/lightness, `sat/lightness`=sat/lightness)
 
-# your wrangling code
+dataset <- inner_data %>% group_by(brand, product) %>% summarize(mean_hue=mean(hue), mean_sat=mean(sat), mean_lightness=mean(lightness), sd_hue=sd(hue), sd_sat=sd(sat), sd_lightness=sd(lightness)) %>% mutate(`hue/sat`=mean_hue/mean_sat, `hue/lightness`=mean_hue/mean_lightness, `sat/lightness`=mean_sat/mean_lightness)
+dataset <- dataset %>% mutate(brand = str_replace(brand, "FENTY BEAUTY by Rihanna", "FENTY"))
 
-# your wrangling code
+summary(dataset)
+```
+Here, I have created a inner_dataset that creates three new ratio variables. Then, a dataset is created that groups by brand and product so that stats are created for each product in their own line. 
+
+```{R}
+library(knitr)
+stores %>% summarize_all(function(x)sum(is.na(x))) %>% kable()
+shades %>% summarize_all(function(x)sum(is.na(x))) %>% kable()
+inner_data %>% summarize_all(function(x)sum(is.na(x))) %>% kable()
 ```
 
-Your discussion of wrangling section here. Feel encouraged to break up into more than once code chunk and discuss each in turn.
+From the above tables, we can see that missing values are only present in the specific column which is handy since we don't use it any graphs or new columns. 
 
+
+```{r}
+table3 <- dataset %>% select(brand, product, contains("/")) %>% arrange(desc(`hue/sat`)) %>% head(3) %>% kable()
+table3
+table4 <- dataset %>% select(brand, product, contains("/")) %>% arrange(desc(`hue/lightness`)) %>% head(3) %>% kable()
+table4
+table5 <- dataset %>% select(brand, product, contains("/")) %>% arrange(desc(`sat/lightness`)) %>% head(3) %>% kable()
+table5
+```
+Here, I have created three tables with each in descending order of ratio value. This was just some exploratory analysis to see that the Clinique - Almost Powder Makeup has the highest hue/sat ratio, L.A. Girl - Pro Matte Mixing Pigment has the highest hue/lightness ratio, and Marc Jacobs - Shameless Youthful has the highest sat/lightness ratio. 
+
+
+```{r}
+dataset %>% select(brand, product) %>% summarize(count=n()) %>% arrange(desc(count)) %>% head(10) %>% pivot_wider(names_from="brand", values_from="count")
+```
+From the above table, I have counted the categorical data to see how many products of each brand there are. Since the full table would have 107 columns, I kept it to only 10 and we can see the top 10 brands that we have the most variety of product information on. 
+
+
+```{r}
+grouped <- dataset %>% group_by(brand) %>% summarize(mean_hue=mean(mean_hue), mean_sat=mean(mean_sat), mean_lightness=mean(mean_lightness))
+```
+Since there are so many products for each brand totaled up, I created another dataset grouped off of brand. This creates a line for each brand that has the averages of the means. 
+
+```{r}
+table3 <- grouped %>% arrange(desc(mean_hue)) %>% head(3) %>% kable()
+table3
+table4 <- grouped %>% arrange(desc(mean_sat)) %>% head(3) %>% kable()
+table4
+table5 <- grouped %>% arrange(desc(mean_lightness)) %>% head(3) %>% kable()
+table5
+```
+From the above tables, we can see that L.A. Girl has the highest mean hue, Winky Lux has the highest mean saturation, and Eborian has the highest mean lightness. 
 
 #### Visualizing
 
 ```{R}
-# your plot 1
+subset1 <- inner_dataset %>% filter(brand=="NARS"|brand=="Estée Lauder"|brand=="Too Faced"|brand=="SEPHORA COLLECTION"|brand=="Revlon"|brand=="Maybelline")
+
+ggplot(subset1, aes(hue, sat, color=brand)) + geom_boxplot() + geom_jitter(alpha=.05) + labs(title= "Hue vs Saturation", x= "Hue", y="Saturation", color="Brand") + theme_light() + scale_x_continuous(breaks=seq(0,60,5)) + scale_y_continuous(breaks=seq(0,1,.1))
 ```
 
-Your discussion of plot 1
+
+
+For all of the visualizations, I decided to single into 6 brands. Maybelline, Revlon, and SEPHORA COLLECTION are considered lower-end, while Estee Lauder, NARS, and Too Faced are considered higher-end. Since there were so many brands, this allowed for more detailed plots to look into. In the first one, we can see that Nars has the widest spread of hue while Revlon has the least. It appears Estee Lauder and Too Faced havea more compact inter 75% of saturation. I think the biggest takeaway, although slight, is that the lower-end brands seemed to be shifted down and left with the exception of Revlon. 
 
 ```{R}
-# your plot 2
+ggplot(subset1, aes(x=`sat/lightness`, fill=brand)) + geom_density(alpha=.75) + geom_function(fun=dnorm) + labs(title="Saturation/Lightness Ratio Densities", x="Sat/Lightness Ratio", y="Density", fill="Brand") + theme_minimal() + scale_x_continuous(breaks=seq(-1, 3, .5), limits=c(-1,3))
 ```
 
-Your discussion of plot 2
+From this graph, we can see that NARS has a spike in its density plot, whereas Maybelline's plot seems to remain low. This means that there is a higher concentration of products for NARS with a ratio between 0 and 1.25. This is interesting because a high saturation/lightness ratio could be an indicator of the quality and pigmentation of products. On the contrary, Too Faced has a similar distribution to Maybelline but one is high-end and one is low-end. It can be difficult to interpret this graph, but the normal distribution line allows for some context as to how the distribution differs from the normal. 
 
 ```{R}
-# your plot 3
+ggplot(subset1, aes(x= hue, y=`sat/lightness`, color=brand)) + geom_point(stat="summary", size=.5) + geom_smooth(method="lm", level = 0, color="gray") + facet_wrap(~brand) + theme_light() + scale_y_continuous(limits=c(.25,2)) + scale_x_continuous(limits=c(5,50))
 ```
 
-Your discussion of plot 3
+For the final plot, I compared hue to the saturation/lightness ratio. The question was is hue increases (more colors) does the sat/lightness ratio increase or decrease? For Revlon and SEPHORA COLLECTION, there is a positive relationship. For Estee Lauder there is not a strong and evident correlation. For Maybelline, NARS, and Too Faced there seems to be a negative relationship. Specifically, if we look at Too Faced we can see that there is a cluster of low hue values that has a high sat/light ratio and a large cluster towards the bottom with high hue values and low sat/light ratio. 
 
 #### Concluding Remarks
 
-If any!
+I think the overall conclusion is that the data is messy, it is hard to zone in on all the values and ratios. It would require further analyzation of a wider range of brands in order to make any definitive conclusions. 
 
 
 
